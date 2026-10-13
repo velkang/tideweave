@@ -1,18 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { decodeFunctionData, maxUint256, verifyTypedData, zeroAddress } from "viem";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { buildMonadWithdrawal, monadWithdrawalDomain, monadWithdrawalMessage,
-  monadWithdrawalPayloadHash, monadWithdrawalTypes } from "../src/monad-withdrawal";
-import { erc20TransferAbi } from "../src/monad-withdrawal";
+import { decodeFunctionData, maxUint256, zeroAddress } from "viem";
+import { buildMonadWithdrawal, erc20TransferAbi, monadWithdrawalPayloadHash } from "../src/monad-withdrawal";
 
-const wallet = "0x1111111111111111111111111111111111111111";
-const token = "0x2222222222222222222222222222222222222222";
-const recipient = "0x3333333333333333333333333333333333333333";
+const wallet = "0x1111111111111111111111111111111111111111" as const;
+const token = "0x2222222222222222222222222222222222222222" as const;
+const recipient = "0x3333333333333333333333333333333333333333" as const;
 const nonce = `0x${"ab".repeat(32)}` as const;
 
 describe("Monad withdrawals", () => {
-  it("binds owner authorization to an ERC-20 transfer and every key field", async () => {
-    const owner = privateKeyToAccount(generatePrivateKey());
+  it("sends an ERC-20 with transfer and binds the payload hash to every key field", () => {
     const withdrawal = buildMonadWithdrawal({ wallet, asset: token, recipient,
       amount: 123n, nonce, expiresAt: 2_000_000_100n });
     expect(withdrawal.to).toBe(token);
@@ -20,19 +16,24 @@ describe("Monad withdrawals", () => {
     expect(decodeFunctionData({ abi: erc20TransferAbi, data: withdrawal.data })).toMatchObject({
       functionName: "transfer", args: [recipient, 123n],
     });
-    const signature = await owner.signTypedData({ domain: monadWithdrawalDomain,
-      types: monadWithdrawalTypes, primaryType: "MonadWithdrawal",
-      message: monadWithdrawalMessage(withdrawal) });
-    expect(await verifyTypedData({ address: owner.address, domain: monadWithdrawalDomain,
-      types: monadWithdrawalTypes, primaryType: "MonadWithdrawal",
-      message: monadWithdrawalMessage(withdrawal), signature })).toBe(true);
-    const changed = buildMonadWithdrawal({ wallet, asset: token, recipient,
-      amount: 124n, nonce, expiresAt: 2_000_000_100n });
-    expect(await verifyTypedData({ address: owner.address, domain: monadWithdrawalDomain,
-      types: monadWithdrawalTypes, primaryType: "MonadWithdrawal",
-      message: monadWithdrawalMessage(changed), signature })).toBe(false);
-    expect(monadWithdrawalPayloadHash(withdrawal, signature))
-      .not.toBe(monadWithdrawalPayloadHash(changed, signature));
+    const hash = monadWithdrawalPayloadHash(withdrawal);
+    const changes = [
+      { amount: 124n },
+      { recipient: token },
+      { nonce: `0x${"cd".repeat(32)}` as const },
+      { wallet: recipient, recipient: wallet },
+    ];
+    for (const change of changes) {
+      const changed = buildMonadWithdrawal({ wallet, asset: token, recipient,
+        amount: 123n, nonce, expiresAt: 2_000_000_100n, ...change });
+      expect(monadWithdrawalPayloadHash(changed)).not.toBe(hash);
+    }
+  });
+
+  it("keeps the payload hash when only the expiry differs, so a retry finds its intent", () => {
+    const first = buildMonadWithdrawal({ wallet, asset: token, recipient, amount: 1n, nonce, expiresAt: 100n });
+    const retry = buildMonadWithdrawal({ wallet, asset: token, recipient, amount: 1n, nonce, expiresAt: 200n });
+    expect(monadWithdrawalPayloadHash(retry)).toBe(monadWithdrawalPayloadHash(first));
   });
 
   it("sends native MON directly to the recipient", () => {

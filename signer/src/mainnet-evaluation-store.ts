@@ -25,7 +25,6 @@ type Row = {
   payload_hash: Hex;
   wallet_address: string;
   wallet_state: WalletState;
-  root_owner_address: string;
   approval_chain_id: number | null;
   approval_target: string | null;
   approval_pool_address: string | null;
@@ -52,7 +51,6 @@ type Row = {
   monad_withdrawal_value: string | null;
   monad_withdrawal_recipient: string | null;
   monad_withdrawal_amount: string | null;
-  monad_withdrawal_signature: Hex | null;
   monad_withdrawal_nonce: Hex | null;
   monad_withdrawal_expires_at: number | null;
   constraints_json: string | null;
@@ -102,7 +100,7 @@ export class D1MainnetEvaluationStore implements MainnetEvaluationStore {
     const row = await this.db.prepare(
       `SELECT wi.id AS intent_id, wi.kind, wi.status, wi.expires_at,
               wi.payload_hash, mw.address AS wallet_address,
-              mw.state AS wallet_state, u.owner_address AS root_owner_address,
+              mw.state AS wallet_state,
               mw.id AS wallet_id, mw.dynamic_wallet_id,
               ai.chain_id AS approval_chain_id,
               ai.token_address AS approval_target,
@@ -131,9 +129,8 @@ export class D1MainnetEvaluationStore implements MainnetEvaluationStore {
               mwi.native_value AS monad_withdrawal_value,
               mwi.recipient AS monad_withdrawal_recipient,
               mwi.amount AS monad_withdrawal_amount,
-              mwi.owner_signature AS monad_withdrawal_signature,
               mwi.nonce AS monad_withdrawal_nonce,
-              mwi.signature_expires_at AS monad_withdrawal_expires_at,
+              mwi.expires_at AS monad_withdrawal_expires_at,
               json_object('run_id', wi.automation_run_id, 'run_status', ar.status,
                 'mandate_id', am.id, 'mandate_status', am.status, 'mandate_pool_id', am.pool_id,
                 'mandate_max_position_usd', am.max_position_usd,
@@ -221,8 +218,7 @@ export class D1MainnetEvaluationStore implements MainnetEvaluationStore {
       expected1,
       actionPoolAddress,
       monadWithdrawal: row.monad_withdrawal_asset && row.monad_withdrawal_recipient &&
-        row.monad_withdrawal_amount && row.monad_withdrawal_signature &&
-        row.monad_withdrawal_nonce && row.monad_withdrawal_expires_at
+        row.monad_withdrawal_amount && row.monad_withdrawal_nonce && row.monad_withdrawal_expires_at
         ? {
             transaction: buildMonadWithdrawal({ wallet: getAddress(row.wallet_address),
               asset: getAddress(row.monad_withdrawal_asset),
@@ -230,8 +226,6 @@ export class D1MainnetEvaluationStore implements MainnetEvaluationStore {
               amount: BigInt(row.monad_withdrawal_amount),
               nonce: row.monad_withdrawal_nonce,
               expiresAt: BigInt(row.monad_withdrawal_expires_at) }),
-            ownerAddress: getAddress(row.root_owner_address),
-            signature: row.monad_withdrawal_signature,
           }
         : undefined,
       custody: row.dynamic_wallet_id

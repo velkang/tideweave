@@ -91,7 +91,7 @@ export const api = {
     return request<{ wallet: ManagedWalletRecord }>("/v1/wallets/me");
   },
   async prepareMonadWithdrawal(params: { asset: string; recipient: string;
-    amount: string; nonce: string; expiresAt: number; signature: string }) {
+    amount: string; nonce: string }) {
     return post<{ intentId: string; status: string; gasEstimate: string; feeReserve: string }>(
       "/v1/wallets/monad/withdrawals/prepare", params);
   },

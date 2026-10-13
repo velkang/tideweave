@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { D1MainnetEvaluationStore } from '../src/mainnet-evaluation-store';
 import { UNISWAP_V3_MONAD, UNISWAP_V4_MONAD } from '@tideweave/chain';
-const schema = readFileSync(new URL('../../api/migrations/0001_initial_schema.sql', import.meta.url), 'utf8');
+const migrations = new URL('../../api/migrations/', import.meta.url);
+const schema = readdirSync(migrations).filter(name => name.endsWith('.sql')).sort()
+  .map(name => readFileSync(new URL(name, migrations), 'utf8')).join('\n');
 const address = '0x1111111111111111111111111111111111111111';
 const token = '0x2222222222222222222222222222222222222222';
 const hash = `0x${'11'.repeat(32)}`;
@@ -56,7 +58,7 @@ describe('clean Monad baseline', () => {
     ['monad_swap', 'monad_swap_intents', { venue: 'uniswap-v3', pair_id: address, token_in: address, token_out: token, native_value: '0' }],
     ['monad_swap_approval', 'monad_swap_approval_intents', { venue: 'uniswap-v3', pair_id: address, token: token, stage: 'erc20' }],
     ['monad_nadfun_add', 'monad_nadfun_intents', { action: 'add', pair_address: address, token0_address: address, token1_address: token, meme_token: token, reserve0: '1', reserve1: '1', total_supply: '1', token0_decimals: 18, token1_decimals: 18 }],
-    ['monad_withdrawal', 'monad_withdrawal_intents', { chain_id: 143, recipient: token, target_address: token, native_value: '1', asset_address: '0x0000000000000000000000000000000000000000', nonce: hash, signature_expires_at: 2000000600, owner_signature: `0x${'11'.repeat(65)}`, owner_address: address }],
+    ['monad_withdrawal', 'monad_withdrawal_intents', { chain_id: 143, recipient: token, target_address: token, native_value: '1', asset_address: '0x0000000000000000000000000000000000000000', nonce: hash, expires_at: 2000000600 }],
   ] as const;
   it.each(cases)('loads %s against the current schema', async (kind, table, detail) => {
     const db = database(); owned(db);

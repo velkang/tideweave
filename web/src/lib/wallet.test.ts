@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { WalletBalances } from './explore-api'
-import { SWAP_GAS_BUFFER, WITHDRAW_GAS_BUFFER, swapSpendable, withdrawable } from './wallet'
+import { SWAP_GAS_BUFFER, WITHDRAW_GAS_BUFFER, sendProblem, swapSpendable, withdrawable } from './wallet'
 
 const ONE = 10n ** 18n
 const USDC = { address: '0x754704Bc059F8C67012fEd69BC8A327a5aafb603', symbol: 'USDC', decimals: 6, balance: '2500000', usd: 2.5 }
@@ -40,5 +40,22 @@ describe('what a swap can sell', () => {
     expect(swapSpendable(pairAssets(native, 12n * ONE, 12n * ONE, '0x4Cd241E8d1510e30b2076397afc7508Ae59C66c9'), 0))
       .toBe(2n * ONE - SWAP_GAS_BUFFER)
     expect(swapSpendable(pairAssets(native, 10n ** 16n, 10n ** 16n), 0)).toBe(0n)
+  })
+})
+
+describe('checking a send before it is prepared', () => {
+  const wallet = '0x90e242E0ABc00Eb8bceBe3Eb91a9B0AE7e7799ef'
+  const to = '0x4444444444444444444444444444444444444444'
+  const send = (recipient: string, amount: bigint) => sendProblem({ wallet, recipient, amount, available: 100n })
+
+  it('accepts any other address within the available amount', () => {
+    expect(send(to, 100n)).toBeNull()
+  })
+  it('names what is wrong', () => {
+    expect(send('', 1n)).toBe('Enter the address to send to.')
+    expect(send('0x1234', 1n)).toBe('Check the address: it is not a Monad address.')
+    expect(send('0x0000000000000000000000000000000000000000', 1n)).toBe('Check the address: it is not a Monad address.')
+    expect(send(wallet.toLowerCase(), 1n)).toBe('That is this wallet. Enter a different address.')
+    expect(send(to, 101n)).toBe('That is more than you can send.')
   })
 })

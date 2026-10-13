@@ -83,9 +83,9 @@ export function WalletPanel({ wallet, canProvision, ownerAddress, onProvision, o
             <span className="flex gap-2">
               <button type="button" className={`${secondary} min-h-9 px-3 text-sm`} aria-label={`Swap ${token.symbol}`}
                 onClick={() => onSwapToken(token.address)}>Swap</button>
-              <button type="button" className={`${secondary} min-h-9 px-3 text-sm`} aria-label={`Withdraw ${token.symbol}`}
+              <button type="button" className={`${secondary} min-h-9 px-3 text-sm`} aria-label={`Send ${token.symbol}`}
                 onClick={() => { setAsset(token.address); document.getElementById('withdraw-heading')?.scrollIntoView({ behavior: 'smooth' }) }}>
-                Withdraw</button>
+                Send</button>
             </span>
           </li>)}
         </ul>

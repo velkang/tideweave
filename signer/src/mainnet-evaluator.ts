@@ -17,13 +17,10 @@ import {
   buildMonadV4Approval,
   buildMonadV4Mint,
   buildMonadV4PositionAction,
-  monadWithdrawalDomain,
-  monadWithdrawalMessage,
-  monadWithdrawalTypes,
   erc20TransferAbi,
   type MonadWithdrawal,
 } from "@tideweave/chain";
-import { parseAbi, decodeFunctionData, verifyTypedData, type Address, type Hex } from "viem";
+import { parseAbi, decodeFunctionData, type Address, type Hex } from "viem";
 import type { MainnetIntentKind } from "./mainnet-policy";
 import type { WalletState } from "./policy";
 import type { AutomationContext } from "./mandate-policy";
@@ -82,11 +79,7 @@ export type LoadedMainnetIntent = {
   actionPoolAddress?: Address;
   expected0?: bigint;
   expected1?: bigint;
-  monadWithdrawal?: {
-    transaction: MonadWithdrawal;
-    ownerAddress: Address;
-    signature: Hex;
-  };
+  monadWithdrawal?: { transaction: MonadWithdrawal };
   monadNadfun?: StoredNadIntent;
   monadSwap?: StoredSwap;
   monadSwapApproval?: StoredSwapApproval;
@@ -433,14 +426,6 @@ async function evaluateMonadWithdrawalLoaded(input: {
   if (loaded.automation) return finish("rejected", "AUTOMATION_NOT_ALLOWED");
   const authorization = loaded.monadWithdrawal;
   try {
-    const signatureValid = await verifyTypedData({
-      address: authorization.ownerAddress,
-      domain: monadWithdrawalDomain,
-      types: monadWithdrawalTypes,
-      primaryType: "MonadWithdrawal",
-      message: monadWithdrawalMessage(authorization.transaction),
-      signature: authorization.signature,
-    });
     if (authorization.transaction.asset === zeroAddress) {
       const balance = await client.getBalance({ address: loaded.wallet.address, blockNumber });
       if (balance < authorization.transaction.amount) {
@@ -470,8 +455,7 @@ async function evaluateMonadWithdrawalLoaded(input: {
     const decision = validateMonadWithdrawal({ now, wallet: loaded.wallet,
       intent: { status: loaded.status, expiresAt: loaded.expiresAt,
         payloadHash: loaded.payloadHash }, transaction: loaded.transaction,
-      withdrawal: { transaction: authorization.transaction,
-        signature: authorization.signature, signatureValid },
+      withdrawal: { transaction: authorization.transaction },
       simulation: { success: true, blockNumber, latestBlockNumber: blockNumber } });
     return finish(decision.allowed ? "allowed" : "rejected", decision.reason);
   } catch (error) {

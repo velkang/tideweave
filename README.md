@@ -2,7 +2,7 @@
 
 **Managed liquidity on Monad.** Swap any token, add liquidity to Uniswap v3, Uniswap v4 and nad.fun pools, and manage or exit positions from one app. You never have to understand ticks, approvals or routing.
 
-Tideweave gives each user a managed wallet on Monad mainnet. The user signs in with their own wallet (the _owner_). Tideweave prepares every transaction, simulates it, and checks it again against live chain state before anything is signed. Only the owner can withdraw.
+Tideweave gives each user a managed wallet on Monad mainnet. Tideweave prepares every transaction, simulates it, and checks it again against live chain state before anything is signed.
 
 Built for **Monad Metropolis**, track _Onchain Finance & Trading_.
 
@@ -22,7 +22,7 @@ Built for **Monad Metropolis**, track _Onchain Finance & Trading_.
 - **Positions.**
   - Each position shows whether it is earning, its range against today's price, what it holds, its uncollected fees (read live) and its dollar value.
   - You can collect fees, remove 25 / 50 / 75 / 100%, or add more.
-- **Wallet.** See the address to fund and your balances, swap a held token, and withdraw to your owner wallet. Each withdrawal is authorised by an EIP-712 signature from the owner.
+- **Wallet.** See the address to fund and your balances, swap a held token, and send MON or any token to any address
 
 ## Why it is safe to hand it a wallet
 

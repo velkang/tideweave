@@ -1,30 +1,9 @@
-import { encodeAbiParameters, encodeFunctionData, parseAbi, getAddress, hashTypedData, keccak256,
-  maxUint256,
-  zeroAddress, type Address, type Hex } from "viem";
+import { encodeAbiParameters, encodeFunctionData, parseAbi, getAddress, keccak256,
+  maxUint256, zeroAddress, type Address, type Hex } from "viem";
 import { MONAD_CHAIN_ID } from "./monad";
 export const erc20TransferAbi = parseAbi([
   "function transfer(address recipient, uint256 amount) returns (bool)",
 ]);
-
-
-
-export const monadWithdrawalTypes = {
-  MonadWithdrawal: [
-    { name: "wallet", type: "address" },
-    { name: "asset", type: "address" },
-    { name: "recipient", type: "address" },
-    { name: "amount", type: "uint256" },
-    { name: "nonce", type: "bytes32" },
-    { name: "expiresAt", type: "uint256" },
-  ],
-} as const;
-
-export const monadWithdrawalDomain = {
-  name: "Tideweave",
-  version: "2",
-  chainId: MONAD_CHAIN_ID,
-  verifyingContract: zeroAddress,
-} as const;
 
 export type MonadWithdrawal = {
   chainId: typeof MONAD_CHAIN_ID;
@@ -68,19 +47,13 @@ export function buildMonadWithdrawal(input: {
   };
 }
 
-export function monadWithdrawalMessage(withdrawal: MonadWithdrawal) {
-  return { wallet: withdrawal.wallet, asset: withdrawal.asset,
-    recipient: withdrawal.recipient, amount: withdrawal.amount,
-    nonce: withdrawal.nonce, expiresAt: withdrawal.expiresAt };
-}
-
-export function monadWithdrawalPayloadHash(withdrawal: MonadWithdrawal, signature: Hex): Hex {
-  const authorizationHash = hashTypedData({ domain: monadWithdrawalDomain,
-    types: monadWithdrawalTypes, primaryType: "MonadWithdrawal",
-    message: monadWithdrawalMessage(withdrawal) });
+/** Binds the stored intent to the exact transfer. The expiry is left out so a retried request with
+ * the same nonce matches the intent it already created. */
+export function monadWithdrawalPayloadHash(withdrawal: MonadWithdrawal): Hex {
   return keccak256(encodeAbiParameters(
-    [{ type: "address" }, { type: "bytes" }, { type: "uint256" },
-      { type: "bytes32" }, { type: "bytes" }],
-    [withdrawal.to, withdrawal.data, withdrawal.value, authorizationHash, signature],
+    [{ type: "address" }, { type: "address" }, { type: "address" }, { type: "uint256" },
+      { type: "bytes32" }, { type: "address" }, { type: "bytes" }, { type: "uint256" }],
+    [withdrawal.wallet, withdrawal.asset, withdrawal.recipient, withdrawal.amount,
+      withdrawal.nonce, withdrawal.to, withdrawal.data, withdrawal.value],
   ));
 }

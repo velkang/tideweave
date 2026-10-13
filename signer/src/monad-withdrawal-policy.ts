@@ -7,7 +7,7 @@ export type MonadWithdrawalPolicyRequest = {
   wallet: { address: Address; state: WalletState };
   intent: { status: string; expiresAt: number; payloadHash: Hex };
   transaction: { chainId: number; to: Address; data: Hex; value: bigint };
-  withdrawal: { transaction: MonadWithdrawal; signature: Hex; signatureValid: boolean };
+  withdrawal: { transaction: MonadWithdrawal };
   simulation: { success: boolean; blockNumber: bigint; latestBlockNumber: bigint };
 };
 
@@ -26,7 +26,6 @@ export function validateMonadWithdrawal(request: MonadWithdrawalPolicyRequest):
       request.simulation.latestBlockNumber - request.simulation.blockNumber > 2n) {
     return reject("SIMULATION_STALE");
   }
-  if (!request.withdrawal.signatureValid) return reject("OWNER_SIGNATURE_INVALID");
   const withdrawal = request.withdrawal.transaction;
   const same = (a: Address, b: Address) => a.toLowerCase() === b.toLowerCase();
   if (!same(withdrawal.wallet, request.wallet.address) ||
@@ -42,7 +41,7 @@ export function validateMonadWithdrawal(request: MonadWithdrawalPolicyRequest):
         (!same(withdrawal.to, withdrawal.asset) || request.transaction.value !== 0n))) {
     return reject("WITHDRAWAL_CONTEXT_MISMATCH");
   }
-  return monadWithdrawalPayloadHash(withdrawal, request.withdrawal.signature) ===
+  return monadWithdrawalPayloadHash(withdrawal) ===
       request.intent.payloadHash
     ? { allowed: true, reason: "POLICY_ALLOWED" }
     : reject("PAYLOAD_HASH_MISMATCH");

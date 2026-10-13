@@ -1,4 +1,4 @@
-import { zeroAddress } from 'viem'
+import { isAddress, zeroAddress } from 'viem'
 import { MONAD_DELEGATED_RESERVE } from '@tideweave/chain'
 import type { PairAssets, WalletBalances } from './explore-api'
 
@@ -13,6 +13,16 @@ export function withdrawable(balances: WalletBalances, asset: string): bigint {
   }
   const token = balances.tokens.find((held) => held.address.toLowerCase() === asset.toLowerCase())
   return token ? BigInt(token.balance) : 0n
+}
+
+/** Why a send can't go ahead yet, or null when it can. */
+export function sendProblem(input: { wallet: string; recipient: string; amount: bigint; available: bigint }): string | null {
+  const recipient = input.recipient.trim()
+  if (!recipient) return 'Enter the address to send to.'
+  if (!isAddress(recipient) || recipient.toLowerCase() === zeroAddress) return 'Check the address: it is not a Monad address.'
+  if (recipient.toLowerCase() === input.wallet.toLowerCase()) return 'That is this wallet. Enter a different address.'
+  if (input.amount > input.available) return 'That is more than you can send.'
+  return null
 }
 
 /** MON kept back when selling MON in a swap, for the swap's own fee. */

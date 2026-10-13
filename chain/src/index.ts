@@ -40,8 +40,7 @@ export { v4PositionManagerReadAbi, buildMonadV4Approval, monadV4ApprovalPayloadH
   monadV4PositionActionPayloadHash,
   type MonadV4Approval, type MonadV4Mint,
   type MonadV4PositionAction } from "./monad-v4-transactions";
-export { buildMonadWithdrawal, monadWithdrawalDomain, monadWithdrawalMessage,
-  monadWithdrawalPayloadHash, monadWithdrawalTypes,
+export { buildMonadWithdrawal, monadWithdrawalPayloadHash,
   erc20TransferAbi, type MonadWithdrawal } from "./monad-withdrawal";
 export {
   approvalPayloadHash,

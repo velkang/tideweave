@@ -1,8 +1,7 @@
 import type { Hono } from "hono";
-import { getAddress, isAddress, parseAbi, verifyTypedData, zeroAddress, type Address, type Hex } from "viem";
+import { getAddress, isAddress, parseAbi, zeroAddress, type Address, type Hex } from "viem";
 import {
-  buildMonadWithdrawal, monad, monadWithdrawalDomain, monadWithdrawalMessage,
-  monadWithdrawalPayloadHash, monadWithdrawalTypes, erc20TransferAbi, type MonadV3PoolClient,
+  buildMonadWithdrawal, monad, monadWithdrawalPayloadHash, erc20TransferAbi, type MonadV3PoolClient,
 } from "@tideweave/chain";
 import { AuthError } from "../auth";
 import { monadClient } from "../clients";
@@ -10,55 +9,51 @@ import { monReserve, walletDelegate } from "../delegation";
 import type { AppEnvironment, RouteDeps } from "../env";
 import { jsonBody, record } from "../http";
 
-/** Owner-signed withdrawals of MON or any ERC-20 from the managed wallet. */
+// A withdrawal sends MON or a held token from the managed wallet to any address, authorized by the
+// signed-in session like every other action. The client's random nonce makes a retry idempotent.
+const EXPIRY_SECONDS = 240;
+
+type WithdrawalRequest = { asset: Address; recipient: Address; amount: bigint; nonce: Hex };
+
+function parseRequest(body: Record<string, unknown>): WithdrawalRequest {
+  const { asset, recipient, amount, nonce } = body;
+  if (typeof asset !== "string" || !isAddress(asset) ||
+      typeof recipient !== "string" || !isAddress(recipient) ||
+      typeof amount !== "string" || !/^[1-9][0-9]*$/.test(amount) ||
+      typeof nonce !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(nonce)) {
+    throw new AuthError("INVALID_WITHDRAWAL", 400);
+  }
+  return { asset: getAddress(asset), recipient: getAddress(recipient), amount: BigInt(amount), nonce: nonce as Hex };
+}
+
+/** Signed in: send MON or any ERC-20 from the managed wallet. Agents may not. */
 export function registerWithdrawalRoutes(app: Hono<AppEnvironment>, deps: RouteDeps) {
   const { now } = deps;
   app.post("/v1/wallets/monad/withdrawals/prepare", async (context) => {
-    const body = record(await jsonBody(context));
-    if (typeof body.asset !== "string" || !isAddress(body.asset) ||
-        typeof body.recipient !== "string" || !isAddress(body.recipient) ||
-        typeof body.amount !== "string" || !/^[1-9][0-9]*$/.test(body.amount) ||
-        typeof body.nonce !== "string" || !/^0x[0-9a-fA-F]{64}$/.test(body.nonce) ||
-        typeof body.signature !== "string" || !/^0x[0-9a-fA-F]+$/.test(body.signature) ||
-        typeof body.expiresAt !== "number" || !Number.isSafeInteger(body.expiresAt)) {
-      throw new AuthError("INVALID_WITHDRAWAL", 400);
-    }
+    if (context.get("agentRun")) throw new AuthError("AGENT_WITHDRAWAL_NOT_ALLOWED", 403);
+    const request = parseRequest(record(await jsonBody(context)));
     const timestamp = now();
-    if (body.expiresAt <= Math.floor(timestamp / 1_000) + 30 ||
-        body.expiresAt > Math.floor(timestamp / 1_000) + 5 * 60) {
-      throw new AuthError("WITHDRAWAL_AUTHORIZATION_EXPIRED", 400);
-    }
+    const expiresAt = Math.floor(timestamp / 1_000) + EXPIRY_SECONDS;
     const wallet = await context.env.DB.prepare(
-      `SELECT mw.id, mw.address, mw.state, u.owner_address
-       FROM managed_wallets mw JOIN users u ON u.id = mw.user_id
-       WHERE mw.user_id = ?1`,
-    ).bind(context.get("user").id)
-      .first<{ id: string; address: Address; state: string; owner_address: Address }>();
+      "SELECT id, address, state FROM managed_wallets WHERE user_id = ?1",
+    ).bind(context.get("user").id).first<{ id: string; address: Address; state: string }>();
     if (!wallet) return context.json({ error: "WALLET_NOT_FOUND" }, 404);
     if (wallet.state !== "active" && wallet.state !== "paused") {
       return context.json({ error: "WALLET_NOT_ACTIONABLE" }, 409);
     }
     let withdrawal;
     try {
-      withdrawal = buildMonadWithdrawal({ wallet: wallet.address,
-        asset: getAddress(body.asset), recipient: getAddress(body.recipient),
-        amount: BigInt(body.amount), nonce: body.nonce as Hex,
-        expiresAt: BigInt(body.expiresAt) });
+      withdrawal = buildMonadWithdrawal({ wallet: wallet.address, ...request, expiresAt: BigInt(expiresAt) });
     } catch {
       throw new AuthError("INVALID_WITHDRAWAL", 400);
     }
-    const validSignature = await verifyTypedData({ address: wallet.owner_address,
-      domain: monadWithdrawalDomain, types: monadWithdrawalTypes,
-      primaryType: "MonadWithdrawal", message: monadWithdrawalMessage(withdrawal),
-      signature: body.signature as Hex }).catch(() => false);
-    if (!validSignature) throw new AuthError("WITHDRAWAL_SIGNATURE_INVALID", 403);
-    const payloadHash = monadWithdrawalPayloadHash(withdrawal, body.signature as Hex);
+    const payloadHash = monadWithdrawalPayloadHash(withdrawal);
     const existing = await context.env.DB.prepare(
-      `SELECT wi.id, wi.status, wi.payload_hash FROM monad_withdrawal_intents mwi
+      `SELECT wi.id, wi.status, wi.payload_hash, wi.wallet_id FROM monad_withdrawal_intents mwi
        JOIN wallet_intents wi ON wi.id = mwi.intent_id WHERE mwi.nonce = ?1`,
-    ).bind(withdrawal.nonce).first<{ id: string; status: string; payload_hash: Hex }>();
+    ).bind(withdrawal.nonce).first<{ id: string; status: string; payload_hash: Hex; wallet_id: string }>();
     if (existing) {
-      if (existing.payload_hash !== payloadHash) {
+      if (existing.wallet_id !== wallet.id || existing.payload_hash !== payloadHash) {
         return context.json({ error: "WITHDRAWAL_NONCE_ALREADY_USED" }, 409);
       }
       return context.json({ intentId: existing.id, status: existing.status, existing: true });
@@ -117,17 +112,15 @@ export function registerWithdrawalRoutes(app: Hono<AppEnvironment>, deps: RouteD
         `INSERT INTO wallet_intents
          (id, wallet_id, kind, payload_hash, status, expires_at, created_at, updated_at)
          VALUES (?1, ?2, 'monad_withdrawal', ?3, 'pending', ?4, ?5, ?5)`,
-      ).bind(intentId, wallet.id, payloadHash, body.expiresAt * 1_000, timestamp),
+      ).bind(intentId, wallet.id, payloadHash, expiresAt * 1_000, timestamp),
       context.env.DB.prepare(
         `INSERT INTO monad_withdrawal_intents
-         (intent_id, chain_id, asset_address, recipient, amount, owner_address,
-          owner_signature, nonce, signature_expires_at, target_address,
-          calldata, native_value, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`,
+         (intent_id, chain_id, asset_address, recipient, amount, nonce, expires_at,
+          target_address, calldata, native_value, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
       ).bind(intentId, monad.id, withdrawal.asset, withdrawal.recipient,
-        withdrawal.amount.toString(), wallet.owner_address, body.signature,
-        withdrawal.nonce, body.expiresAt, withdrawal.to, withdrawal.data,
-        withdrawal.value.toString(), timestamp),
+        withdrawal.amount.toString(), withdrawal.nonce, expiresAt, withdrawal.to,
+        withdrawal.data, withdrawal.value.toString(), timestamp),
     ]);
     return context.json({ intentId, status: "pending", gasEstimate: gas.toString(),
       feeReserve: feeReserve.toString() }, 201);
