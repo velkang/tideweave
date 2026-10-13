@@ -2,11 +2,10 @@ import { getAddress, isAddress } from "viem";
 import { discoverToken, refreshDirectory } from "./pool-discovery";
 import { createDirectoryClient, DIRECTORIES, type IndexerEnv, type MonadDirectoryName } from "./directories";
 import { PoolDiscovery } from "./pool-discovery-object";
+import { jobsAt } from "./schedule";
 
-// Each job runs on its own cron (see wrangler.jsonc) so it gets its own
-// per-invocation budget. Live pool discovery runs every ~10 s in PoolDiscovery.
-const DISCOVERY_CRON = "* * * * *"; // keeps the live loop running
-const REFRESH_CRON = "2-59/5 * * * *";
+// One cron, every minute (see wrangler.jsonc and schedule.ts): it keeps the live loop running, and on its own
+// minutes refreshes pool state or expires intents. Live pool discovery runs every ~10 s in PoolDiscovery.
 // Pools re-checked per run, at 2 raw chain calls each. Keep a run near 120 calls per protocol:
 // larger slices risk the RPC request timeout and then write nothing.
 const REFRESH_LIMITS: Record<MonadDirectoryName, number> = { "monad-v3": 40, "monad-v4": 40, "monad-nadfun": 40 };
@@ -46,11 +45,10 @@ export default {
     env: IndexerEnv,
     _context: ExecutionContext,
   ): Promise<void> {
-    if (controller.cron === DISCOVERY_CRON) {
-      await ensureLiveDiscovery(env);
-      return;
-    }
-    if (controller.cron === REFRESH_CRON) {
+    const jobs = jobsAt(controller.scheduledTime);
+    // A failed restart of the live loop must not skip this minute's other job; the next minute retries it.
+    await ensureLiveDiscovery(env).catch((error) => console.warn("Live pool discovery restart failed", error));
+    if (jobs.includes("refresh")) {
       const client = createDirectoryClient(env.MONAD_RPC_URL);
       for (const dir of DIRECTORIES) {
         try {
@@ -60,8 +58,8 @@ export default {
           console.warn(`${dir.name} pool refresh will resume next run`, error);
         }
       }
-      return;
     }
+    if (!jobs.includes("expire")) return;
 
     // Every 5 minutes: approved actions nobody confirmed in time stop being usable.
     const timestamp = Date.now();
