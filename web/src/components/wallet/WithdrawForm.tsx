@@ -1,0 +1,83 @@
+import { useEffect, useState } from 'react'
+import { getAddress, isAddress, zeroAddress, type Hex } from 'viem'
+import { useAccount, useChainId, useSignTypedData } from 'wagmi'
+import { buildMonadWithdrawal, monadWithdrawalDomain, monadWithdrawalMessage, monadWithdrawalTypes } from '@tideweave/chain'
+import { api, type ManagedWalletRecord } from '../../lib/api-client'
+import type { RunIntent } from '../../lib/execute'
+import type { PairToken, Prepared, WalletBalances } from '../../lib/explore-api'
+import { formatAmount, formatToken, rawAmount } from '../../lib/format'
+import { withdrawable } from '../../lib/wallet'
+import { button, input, secondary } from '../explore/ui'
+
+type Props = {
+  wallet: ManagedWalletRecord
+  balances: WalletBalances
+  ownerAddress?: string
+  /** The asset to withdraw, chosen here or from the balance list. */
+  asset: string
+  onAsset: (asset: string) => void
+  busy: string
+  run: RunIntent
+}
+
+const MON: PairToken = { address: zeroAddress, symbol: 'MON', decimals: 18 }
+const randomNonce = () => `0x${Array.from(crypto.getRandomValues(new Uint8Array(32)),
+  (byte) => byte.toString(16).padStart(2, '0')).join('')}` as Hex
+
+/** Moves MON or a held token out of the managed wallet, authorized by the owner wallet's signature. */
+export function WithdrawForm({ wallet, balances, ownerAddress, asset, onAsset, busy, run }: Props) {
+  const { address: connectedAddress } = useAccount()
+  const chainId = useChainId()
+  const { signTypedDataAsync } = useSignTypedData()
+  const [amount, setAmount] = useState('')
+  const [recipient, setRecipient] = useState(ownerAddress ?? '')
+  useEffect(() => { if (ownerAddress && !recipient) setRecipient(ownerAddress) }, [ownerAddress, recipient])
+  useEffect(() => { setAmount('') }, [asset])
+
+  const choices: PairToken[] = [MON, ...balances.tokens]
+  const token = choices.find((choice) => choice.address.toLowerCase() === asset.toLowerCase()) ?? MON
+  const available = withdrawable(balances, token.address)
+  const toOwner = Boolean(ownerAddress) && recipient.toLowerCase() === ownerAddress?.toLowerCase()
+
+  const prepare = async (): Promise<Prepared> => {
+    if (!ownerAddress || !connectedAddress || chainId !== 143 ||
+        connectedAddress.toLowerCase() !== ownerAddress.toLowerCase()) {
+      throw new Error('Connect the owner wallet on Monad to authorize this withdrawal.')
+    }
+    if (!isAddress(recipient)) throw new Error('Check the recipient address.')
+    const raw = rawAmount(amount, token.decimals)
+    if (raw > available) throw new Error(`At most ${formatToken(available, token.decimals)} ${token.symbol} can be withdrawn.`)
+    const transaction = buildMonadWithdrawal({ wallet: getAddress(wallet.address), asset: getAddress(token.address),
+      recipient: getAddress(recipient), amount: raw, nonce: randomNonce(),
+      expiresAt: BigInt(Math.floor(Date.now() / 1000) + 240) })
+    const signature = await signTypedDataAsync({ domain: monadWithdrawalDomain, types: monadWithdrawalTypes,
+      primaryType: 'MonadWithdrawal', message: monadWithdrawalMessage(transaction) })
+    return api.prepareMonadWithdrawal({ asset: transaction.asset, recipient: transaction.recipient,
+      amount: transaction.amount.toString(), nonce: transaction.nonce, expiresAt: Number(transaction.expiresAt),
+      signature })
+  }
+
+  return <section aria-labelledby="withdraw-heading" className="rounded-2xl border border-line bg-field p-4">
+    <h3 id="withdraw-heading" className="font-semibold">Withdraw</h3>
+    <p className="mt-1 text-sm text-ink-muted">Your owner wallet signs each withdrawal; nothing leaves without that signature.</p>
+    <div className="mt-3 grid gap-3">
+      <label className="text-sm">Asset<select className={`${input} mt-1`} value={token.address}
+        onChange={(event) => onAsset(event.target.value)}>
+        {choices.map((choice) => <option key={choice.address} value={choice.address}>{choice.symbol}</option>)}</select></label>
+      <label className="text-sm">Amount
+        <span className="mt-1 flex gap-2"><input className={input} inputMode="decimal" value={amount} placeholder="0.0"
+          onChange={(event) => setAmount(event.target.value.replace(',', '.'))} />
+          {/* Max is exact, so nothing is left behind. */}
+          <button type="button" className={`${secondary} px-4`} disabled={available <= 0n}
+            onClick={() => setAmount(formatAmount(available, token.decimals))}>Max</button></span>
+        <span className="mt-1 block text-xs text-ink-muted">Available {formatToken(available, token.decimals)} {token.symbol}
+          {token.address === zeroAddress ? ' after keeping MON for the fee' : ''}</span></label>
+      <label className="text-sm">To<input className={`${input} mt-1 font-mono text-xs`} value={recipient}
+        onChange={(event) => setRecipient(event.target.value.trim())} />
+        <span className="mt-1 block text-xs text-ink-muted">{toOwner ? 'Your owner wallet.' : 'Not your owner wallet: check this address.'}</span></label>
+    </div>
+    <button type="button" className={`${button} mt-4 w-full`} disabled={Boolean(busy) || !amount || available <= 0n}
+      onClick={() => void run('Withdrawal', async () => { const prepared = await prepare(); setAmount(''); return prepared })}>
+      Sign and withdraw</button>
+  </section>
+}

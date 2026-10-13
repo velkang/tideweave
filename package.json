@@ -1,0 +1,24 @@
+{
+  "name": "tideweave",
+  "private": true,
+  "packageManager": "pnpm@11.1.0",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "check": "pnpm -r --if-present check",
+    "test": "pnpm -r --if-present test",
+    "dev": "wrangler dev -c api/wrangler.jsonc -c signer/wrangler.jsonc -c automation/wrangler.jsonc --local",
+    "dev:smoke": "wrangler dev -c api/wrangler.jsonc -c signer/wrangler.jsonc --local --persist-to .wrangler/smoke-state --port 8790",
+    "web:dev": "pnpm --dir web dev",
+    "web:build": "pnpm --dir web build",
+    "db:migrate:local": "wrangler d1 migrations apply tideweave-dev --local -c api/wrangler.jsonc",
+    "db:migrate:smoke": "wrangler d1 migrations apply tideweave-dev --local --persist-to .wrangler/smoke-state -c api/wrangler.jsonc",
+    "integrations:dynamic": "pnpm --filter @tideweave/dynamic-wallet prove:server-wallet",
+    "indexer:dev": "wrangler dev -c indexer/wrangler.jsonc --local --test-scheduled --persist-to api/.wrangler/state --port 8788 --inspector-port 9231",
+    "dynamic:dev": "pnpm --filter @tideweave/dynamic-wallet dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.135.0"
+  }
+}

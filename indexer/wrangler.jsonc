@@ -1,0 +1,25 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "tideweave-indexer",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-18",
+  "workers_dev": false,
+  "preview_urls": false,
+  "keep_vars": true,
+  "triggers": {
+    "crons": ["* * * * *", "*/5 * * * *", "2-59/5 * * * *"],
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "DISCOVERY", "class_name": "PoolDiscovery" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PoolDiscovery"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tideweave-dev",
+      "database_id": "faaebc44-a846-4918-96b4-5a57a26d02bf",
+      "migrations_dir": "../api/migrations",
+    },
+  ],
+  "observability": { "enabled": true },
+}

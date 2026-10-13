@@ -1,0 +1,10 @@
+MONAD_RPC_URL=https://rpc.monad.xyz
+AGENT_DAILY_CALL_LIMIT=100
+
+AGENT_SECRET=
+
+AGENT_PROVIDER=kimi
+AGENT_KIMI_MODEL=kimi-k2.6
+
+MOONSHOT_API_KEY=
+MOONSHOT_BASE_URL=https://api.moonshot.ai/v1

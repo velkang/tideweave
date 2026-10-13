@@ -1,0 +1,5 @@
+export const button = 'inline-flex min-h-11 items-center justify-center rounded-lg bg-accent px-5 py-2 font-semibold text-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50'
+export const secondary = 'inline-flex min-h-11 items-center justify-center rounded-lg border border-line-strong px-5 py-2 font-medium hover:bg-tint disabled:cursor-not-allowed disabled:opacity-50'
+export const input = 'min-h-11 w-full rounded-xl border border-line-strong bg-field px-3 text-ink outline-none focus-visible:ring-2 focus-visible:ring-link'
+export const card = 'rounded-xl border border-line bg-card p-5 sm:p-7'
+export const badge = 'inline-flex items-center rounded-lg border border-line px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-ink-muted'

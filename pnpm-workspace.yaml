@@ -1,0 +1,19 @@
+packages:
+  - api
+  - automation
+  - indexer
+  - chain
+  - signer
+  - web
+  - dynamic-wallet
+
+allowBuilds:
+  '@reown/appkit': true
+  bufferutil: true
+  esbuild: true
+  keccak: true
+  utf-8-validate: true
+  workerd: true
+  protobufjs: true
+  bigint-buffer: false
+confirmModulesPurge: false

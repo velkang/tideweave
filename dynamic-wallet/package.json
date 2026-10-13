@@ -1,0 +1,20 @@
+{
+  "name": "@tideweave/dynamic-wallet",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "dev": "HOST=127.0.0.1 node --env-file=.env src/server.mjs",
+    "smoke:service": "node scripts/smoke-service.mjs",
+    "prove:server-wallet": "node scripts/prove-server-wallet.mjs",
+    "prove:7702": "node scripts/prove-7702.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@dynamic-labs-wallet/node-evm": "^1.1.28",
+    "viem": "^2.56.7"
+  }
+}

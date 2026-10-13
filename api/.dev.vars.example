@@ -1,0 +1,5 @@
+AUTH_URI=
+AUTH_COOKIE_SECURE=false
+AGENT_SECRET=
+# Optional; the public Monad mainnet RPC is used when empty. Keep it equal across Workers.
+MONAD_RPC_URL=
